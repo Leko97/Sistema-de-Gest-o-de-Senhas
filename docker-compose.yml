@@ -22,7 +22,7 @@ services:
     volumes:
       - novosga_files:/var/www/html/var
     ports:
-      - "8080:80"
+      - "3000:80"
 
   installer:
     image: ${COMPOSE_PROJECT_NAME}_novosga:latest
