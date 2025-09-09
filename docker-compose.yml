@@ -1,37 +1,35 @@
 version: "3.8"
-
 services:
   db:
     image: mariadb:10.5
-    restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: Wt134679
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: sgs
       MYSQL_USER: admin
-      MYSQL_PASSWORD: Wt134679
+      MYSQL_PASSWORD: ${NOVOSGA_DB_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin" ,"ping","-h","localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+      
   novosga:
-    image: novosga/novosga:2.2-standalone
-    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
       - db
-      - mercure
-    ports:
-      - "8080:80"   # expõe a UI (coolify irá mapear/proxyar via domínio)
     environment:
-      # URL do banco (Symfony style). ajuste serverVersion se usar MySQL 8.
-      DATABASE_URL: "mysql://novosga:senhaNovosga@db:3306/novosga?charset=utf8mb4&serverVersion=5.7"
-      APP_ENV: "prod"
-      APP_SECRET: "134679"
+      DATABASE_URL: "mysql://novosga:${NOVOSGA_DB_PASSWORD}@db:3306/novosga?charset=utf8mb4"
+      APP_SECRET: ${APP_SECRET}
     volumes:
       - novosga_files:/var/www/html/var
+    ports:
+      - "8080:80"
+
+  installer:
+    image: ${COMPOSE_PROJECT_NAME}_novosga:latest
+    depends_on:
+      - db
+    entrypoint: ["sh","-c","sleep 10; bin/console novosga:install || true"]
+    restart: "no"
 
 volumes:
   db_data:
