@@ -1,35 +1,54 @@
 version: "3.8"
+
 services:
   db:
     image: mariadb:10.5
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: sgs
-      MYSQL_USER: admin
-      MYSQL_PASSWORD: ${NOVOSGA_DB_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
-      
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   novosga:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: novosga/novosga:latest
     depends_on:
       - db
     environment:
-      DATABASE_URL: "mysql://novosga:${NOVOSGA_DB_PASSWORD}@db:3306/novosga?charset=utf8mb4"
+      DATABASE_URL: "mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}?charset=utf8mb4"
       APP_SECRET: ${APP_SECRET}
+      APP_ENV: "prod"
     volumes:
       - novosga_files:/var/www/html/var
     ports:
-      - "3000:3000"
+      - "8080:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
 
   installer:
-    image: ${COMPOSE_PROJECT_NAME}_novosga:latest
+    image: novosga/novosga:latest
     depends_on:
       - db
-    entrypoint: ["sh","-c","sleep 10; bin/console novosga:install || true"]
+    entrypoint: ["sh","-c","\
+      COUNT=0; MAX=40; SLEEP=3; \
+      until (mysqladmin ping -h db -u${MYSQL_USER} -p${MYSQL_PASSWORD} --silent) || [ $COUNT -ge $MAX ]; do \
+        echo \"waiting for db... ($COUNT)\"; sleep $SLEEP; COUNT=$((COUNT+1)); \
+      done; \
+      if [ $COUNT -ge $MAX ]; then echo 'DB not ready, aborting installer' >&2; exit 1; fi; \
+      bin/console novosga:install --no-interaction || true"]
     restart: "no"
+    environment:
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
 
 volumes:
   db_data:
